@@ -1,0 +1,58 @@
+How to benchmark?
+Understand what you are benchmarking
+1. profile your application first. If your application is read heavy, then the 50/50 read write test will not be as useful to you.
+
+2. Know what to test, change tests according to what you are testing. Like if you are testing latency, then the number of operations should be kept constant.
+
+3. Cluster vs single node: if you are using cluster, then make sure you are splitting across enough nodes in the cluster. Understand the setup
+
+memtier_benchmark => supports multiple command benchmarks
+memtier always tries to use max system resources. so better for checking for limits and stuff.
+redis-benchmark
+
+github.com/filipecosta90/redisconf21-how-to-benchmark-redis-demo
+
+If redis is not running on the default port, use the following to fix it
+
+NOTE: to run this, will have to cd into the folder where RedisAI is stored (because we are using redisAI)
+As of now, it is stored here
+/home/faaiqbilal/CourseResources/Semester6/TopicsIR/ResProj/RedisAI
+
+redis-server --port 6360 --loadmodule ./install-cpu/redisai.so
+
+Corresponding to the port given above, use the following to benchmark the model. This example shown uses AI models so going to need to put some AI models here 
+
+memtier_benchmark --clients 50 --threads 4 --requests 10000 --pipeline 1 --json-out-file results.json --command "AI.MODELEXECUTE model_key INPUTS input_count input1 ... OUTPUTS output_count output1 ..." --command "AI.SCRIPTEXECUTE script_key entry_point INPUTS input_count input1 ... OUTPUTS output_count output1 ..." -p 6360
+
+
+For now, try to replace the AI models with simple key value pairs and do read writes on them instead. Maybe change the ratio of reads/writes instead.
+
+Notes to write about in benchmarking
+Naively iterating on synchronous Redis commands does not benchmark Redis itself, but rather measure your network (or IPC) latency and the client library intrinsic latency. To really test Redis, you need multiple connections (like redis-benchmark) and/or to use pipelining to aggregate several commands and/or multiple threads or processes. (https://redis.io/docs/reference/optimization/benchmarks/)
+
+Actually, by using pipelining and a fast client (hiredis), it is fairly easy to write a program generating more throughput than redis-benchmark. The default behavior of redis-benchmark is to achieve throughput by exploiting concurrency only (i.e. it creates several connections to the server). It does not use pipelining or any parallelism at all (one pending query per connection at most, and no multi-threading), if not explicitly enabled via the -P parameter
+Important note in general (not necessarily to be included in the actual paper)
+Redis is, mostly, a single-threaded server from the POV of commands execution (actually modern versions of Redis use threads for different things). It is not designed to benefit from multiple CPU cores. People are supposed to launch several Redis instances to scale out on several cores if needed. It is not really fair to compare one single Redis instance to a multi-threaded data store.
+
+
+The benchmark should apply the same operations, and work in the same way with the multiple data stores you want to compare. It is absolutely pointless to compare the result of redis-benchmark to the result of another benchmark program and extrapolate.
+
+
+Actually, by using pipelining and a fast client (hiredis), it is fairly easy to write a program generating more throughput than redis-benchmark. The default behavior of redis-benchmark is to achieve throughput by exploiting concurrency only (i.e. it creates several connections to the server). It does not use pipelining or any parallelism at all (one pending query per connection at most, and no multi-threading), if not explicitly enabled via the -P parameter
+
+
+memtier_benchmark -t 5 -c 10 -s 10.3.0.91 -p 6379 -d 1000 --test-time 300 --run-count 3 --key-maximum = 1000000 --distinct-client-seed --command="hset __key__ field1 __data__" --command-ratio=5 --commanad="hgetall __key__" --command-ratio=95 --hdr-file-prefix="mixed.latency.data" --json-out-file "mixed.workload.json" --hide-histogram
+
+memtier_benchmark -t 4 -clients 10 -p 6360 -d 1000 --test-time 300 --run-count 3 --key-maximum = 1000000 --distinct-client-seed --command="hset __key__ field1 __data__" --command-ratio=5 --commanad="hgetall __key__" --command-ratio=95 --hdr-file-prefix="mixed.latency.data" --json-out-file "mixed.workload.json" --hide-histogram
+
+
+Command to add a model to the redis datastore
+This adds renet50.pb with mymodel as its key to redis
+cat resnet50.pb | redis-cli -p 6360 -x AI.MODELSTORE mymodel TF CPU TAG imagenet:5.0 INPUTS 1 images OUTPUTS 1 output BLOB
+
+
+Currently using aibench to do all the testing, reference can be found here:
+https://github.com/RedisAI/aibench/blob/master/docs/creditcard-fraud-benchmark/description.md
+
+basically following this as a kind of guide
+I will probably be changing the database port in the actual script because hardcoding it for the demo
